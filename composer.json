@@ -23,7 +23,7 @@
   },
   "autoload": {
     "psr-4": {
-      "\\": "rubika/"
+      "rubi\\": "rubika/"
     }
   },
   "minimum-stability": "dev"
