@@ -24,7 +24,7 @@
       "url": "https://github.com/Amirmohammadpezeshkii/rubika.git"
     }
   ],
-  "require-dev": {
+  "require": {
         "textalk/websocket": "^1.6"
   },
   "autoload": {
