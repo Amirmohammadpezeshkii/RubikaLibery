@@ -1,5 +1,5 @@
 <?php
-namespace RubikaLibery;
+namespace rubi;
 class encryption{
 
 public static function secret($a){
