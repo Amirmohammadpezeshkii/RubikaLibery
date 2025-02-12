@@ -1,5 +1,5 @@
 {
-  "name": "RubiLibery",
+  "name": "rubikalibery",
   "description": "A simple and lightweight client for connecting to Rubika and Shad messaging platforms, designed for easy integration and efficient setup of user-friendly applications. This library provides essential functionalities for sending and receiving messages, managing user sessions, and ensuring smooth communication, making it ideal for developers looking to enhance their apps with messaging features.",
   "version": "dev",
   "type": "library",
@@ -23,7 +23,7 @@
   },
   "autoload": {
     "psr-4": {
-      "RubiLibery\\": "rubika/"
+      "rubikalibery\\": "rubika/"
     }
   },
   "minimum-stability": "dev"
