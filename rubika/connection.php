@@ -1,5 +1,5 @@
 <?php
-namespace amirmohamadpezeshki\rubika;
+namespace RubikaLibery;
 
 class connection{
 
