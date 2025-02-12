@@ -1,6 +1,5 @@
 <?php
-namespace amirmohamadpezeshki\rubika;
-
+namespace RubikaLibery;
 class encryption{
 
 public static function secret($a){
