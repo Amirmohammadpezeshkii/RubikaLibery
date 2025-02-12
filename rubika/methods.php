@@ -1,5 +1,5 @@
 <?php
-namespace AmirMohamadPezeshki\Rubika;
+namespace amirmohamadpezeshki\rubika;
 class methods extends connection{
 
 public function __construct($phone){
