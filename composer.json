@@ -29,9 +29,8 @@
   },
   "autoload": {
     "psr-4": {
-      "Rubika\\": "rubika/"
+      "AmirMohamadPezeshki\\Rubika\\": "rubika/"
     }
   },
-  "minimum-stability": "stable",
-  "prefer-stable": true
+  "minimum-stability": "dev"
 }
