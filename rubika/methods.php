@@ -1,5 +1,5 @@
 <?php
-namespace RubikaLibery;
+namespace rubi;
 class methods extends connection{
 
 public function __construct($phone){
