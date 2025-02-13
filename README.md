@@ -5,7 +5,7 @@
 </p>
 
 # Rubika-PHP
-*Rubika-PHP is a PHP Library for interaction with rubika (social network)
+* Rubika-PHP is a PHP Library for interaction with rubika (social network)
 
 ## Installation
 ```
@@ -30,7 +30,7 @@ $account->onUpdate(function (array $update) use ($account) {
 * coming soon...
 
 ## About Us
-This library can be used for easy interaction with Rubika just like official applications.
+* This library can be used for easy interaction with Rubika just like official applications.
 
 ## Disclaimer
 
@@ -42,4 +42,4 @@ This library can be used for easy interaction with Rubika just like official app
 
 
 ## License
-Rubika-PHP is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+* Rubika-PHP is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
