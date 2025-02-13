@@ -1,4 +1,8 @@
 <p align="center">
+<a href='https://web.rubika.ir' target="_blank">
+<img src='https://rubika.ir/static/images/logo.svg'></img></a></p>
+<br />
+<p align="center">
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/packagist/dt/rubi/lib" alt="Total Downloads"></a>
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/packagist/v/rubi/lib" alt="Latest Stable Version"></a>
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/packagist/l/rubi/lib" alt="License"></a>
