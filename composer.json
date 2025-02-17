@@ -22,7 +22,8 @@
     "روبی",
     "rubika bot",
     "self rubika",
-    "php bot"
+    "php bot",
+    "1.0.0"
   ],
   "require": {
         "textalk/websocket": "^1.6"
