@@ -35,6 +35,7 @@ $account->onUpdate(function (array $update) use ($account) {
 
 ## About Us
 * This library can be used for easy interaction with Rubika just like official applications.
+[support](https://t.me/amirMohamadPezeshki)
 
 ## Disclaimer
 
