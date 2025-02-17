@@ -1,7 +1,6 @@
 {
   "name": "rubi/lib",
   "description": "A simple and lightweight client for connecting to Rubika and Shad messaging platforms, designed for easy integration and efficient setup of user-friendly applications. This library provides essential functionalities for sending and receiving messages, managing user sessions, and ensuring smooth communication, making it ideal for developers looking to enhance their apps with messaging features.",
-  "version": "1.0.0",
   "type": "library",
   "license": "MIT",
   "repositories": [
@@ -22,8 +21,7 @@
     "روبی",
     "rubika bot",
     "self rubika",
-    "php bot",
-    "1.0.0"
+    "php bot"
   ],
   "require": {
         "textalk/websocket": "^1.6"
