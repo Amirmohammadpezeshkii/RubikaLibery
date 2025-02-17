@@ -13,7 +13,7 @@
 
 ## Installation
 ```
-composer require rubi/lib:dev-main
+composer require rubi/lib
 ```
 ## Usage
 ```php
