@@ -77,12 +77,12 @@ else if(!empty($m[9]) and self::object_type($m[9]))
 $result[] = ['type' => 'MentionText', 'mention_text_object_guid' => $m[9], 'mention_text_object_type' => self::object_type($m[9]), 'from_index' => mb_strpos($text, '['), 'length' => mb_strlen($m[8])];
 else if(!empty($m[9]))
 $result[] = ['type' => 'Link', 'link' => ['type' => 'hyperlink', 'hyperlink_data' => ['url' => $m[9]]], 'from_index' => mb_strpos($text, '['), 'length' => mb_strlen($m[8])];
-$text = preg_replace($p, '$1$2$3$4$5$6$7$8', $text, 1);
+$text = preg_replace($p, "$1$2$3$4$5$6$7$8", $text, 1);
 }
 return ['data' => ['meta_data_parts' => $result], 'text' => trim($text)];
 }
 
-public function sendMessage($object_guid, $reply_to_message_id, $text, $metadata = null){
+public function sendMessage($object_guid, $reply_to_message_id, $text){
 $meta = self::metaData($text);
 $json = [
 'rnd' => mt_rand(100000, 999999),
@@ -101,7 +101,7 @@ $json = [
 'message_id' => $message_id,
 'text' => $meta['text']];
 if(count(($meta['data']['meta_data_parts'] ?? [])) > 0)
-$json['metadata'] = null;
+$json['metadata'] = $meta['data'];
 return connection::run('editMessage', $json);
 }
 
@@ -659,6 +659,10 @@ return connection::run("getTranscription", compact('message_id', 'transcription_
 
 public function transcribeVoice($object_guid, $message_id){
 return connection::run("transcribeVoice", compact('object_guid', 'message_id'));
+}
+
+public function is_out($user_guid){
+return $user_guid == $this->d['self']['guide'];
 }
 
 }

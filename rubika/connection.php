@@ -8,15 +8,15 @@ private static $c = [
 'lang_code' => 'en',
 'package' => 'app.rbmain.a',
 'platform' => 'Android'];
-private $servers, $auth, $key, $d;
+public $servers, $auth, $key, $d;
 
 public function __construct($phone, $auth = null, $key = null){
-$this->d = file_exists(encryption::secret($phone)) ? json_decode(encryption::openssl(false, file_get_contents(encryption::secret($phone)), encryption::secret($phone)), true) : [];
-[$this->key, $this->auth] = [($this->d['key'] ?? $key), ($this->d['auth'] ?? $auth)];
 $this->servers = (file_exists(__DIR__ .'/servers')) ? json_decode(file_get_contents(__DIR__ .'/servers'), true) : self::getDCs();
 file_put_contents(__DIR__ .'/servers', json_encode($this->servers, 448));
-if(empty($this->key) or empty($this->auth))
+if(empty($auth) or empty($key))
 (new signin($phone));
+$this->d = file_exists(encryption::secret($phone)) ? json_decode(encryption::openssl(false, file_get_contents(encryption::secret($phone)), encryption::secret($phone)), true) : [];
+[$this->key, $this->auth] = [($key ?? $this->d['key'] ?? null), ($auth ?? $this->d['auth'] ?? null)];
 }
 
 public static function req($u, $d = []){
@@ -66,6 +66,7 @@ $client->text(json_encode([
 'data' => json_encode(['version' => 2]),
 'method' => 'handShake',
 'client' => self::$c]));
+echo 'connected '. $socket . PHP_EOL;
 while (true) {
 if(($time ?? 0) <= time() and $time = time() +3)
 $client->text('{}');
