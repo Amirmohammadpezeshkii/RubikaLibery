@@ -82,6 +82,17 @@ $text = preg_replace($p, "$1$2$3$4$5$6$7$8", $text, 1);
 return ['data' => ['meta_data_parts' => $result], 'text' => trim($text)];
 }
 
+public function object_type($object_guid){
+if(str_contains($object_guid, 'u'))
+return 'User';
+else if(str_contains($object_guid, 'c'))
+return 'Channel';
+else if(str_contains($object_guid, 'g'))
+return 'Group';
+else
+false;
+}
+
 public function sendMessage($object_guid, $reply_to_message_id, $text){
 $meta = self::metaData($text);
 $json = [
