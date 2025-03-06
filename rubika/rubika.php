@@ -2,6 +2,7 @@
 namespace rubi;
 class rubika extends connection{
 public $phone;
+
 public function __construct($phone){
 $this->phone = $phone;
 parent::__construct($phone);

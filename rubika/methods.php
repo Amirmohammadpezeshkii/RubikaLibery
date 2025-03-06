@@ -56,7 +56,7 @@ public function sendChatActivity($object_guid, $action) /*Typing , Uploading, Re
 return connection::run('sendChatActivity', ['object_guid' => $object_guid, 'activity' => $action->value]);
 }
 
-public function metaData($text, $result = []){
+public static function metaData($text, $result = []){
 $p ='/```(.*?)```|\*\*(.*?)\*\*|`(.*?)`|__(.*?)__|--(.*?)--|~~(.*?)~~|\|\|(.*?)\|\||\[(.*?)\]\(\s*(https?:\/\/\S+|g0|u0|c0|[^\s]+)\s*\)/us';
 while(preg_match($p, $text, $m)){
 if(str_contains($m[0], '```'))
@@ -82,7 +82,7 @@ $text = preg_replace($p, "$1$2$3$4$5$6$7$8", $text, 1);
 return ['data' => ['meta_data_parts' => $result], 'text' => trim($text)];
 }
 
-public function object_type($object_guid){
+public static function object_type($object_guid){
 if(str_contains($object_guid, 'u'))
 return 'User';
 else if(str_contains($object_guid, 'c'))
@@ -114,27 +114,6 @@ $json = [
 if(count(($meta['data']['meta_data_parts'] ?? [])) > 0)
 $json['metadata'] = $meta['data'];
 return connection::run('editMessage', $json);
-}
-
-public function sendRubinoStory($object_guid, $story_id, $profile_id, $is_mute = false){
-$json = [
-'is_mute' => $is_mute,
-'object_guid' => $object_guid,
-'rnd' => random_int(-998899, -12312),
-'story_id' => $story_id,
-'story_profile_id' => $profile_id,
-'type' => 'Direct'];
-return connection::run('sendRubinoStory', $json);
-}
-
-public function sendRubinoPost($object_guid, $post_id, $profile_id, $is_mute = false){
-$json = [
-'is_mute' => $is_mute,
-'object_guid' => $object_guid,
-'rnd' => random_int(-998899, -12312),
-'post_id' => $post_id,
-'post_profile_id' => $profile_id];
-return connection::run('sendRubinoPost', $json);
 }
 
 public function getMyGifSet(){
@@ -186,7 +165,7 @@ return connection::run('getObjectByUsername', compact('username'));
 
 public function getMessages($object_guid, $sort = 'FromMax', $min_id = null){ /* FromMin, FromMax */
 $json = ['object_guid' => $object_guid,
-'sort' => $sort->value];
+'sort' => $sort];
 empty($min_id) ? null : $json['min_id'] = $min_id;
 return connection::run('getMessages', $json);
 }
@@ -243,175 +222,6 @@ return connection::run('getAbsObjects', compact('objects_guids'));
 
 public function getListMessagesByID(array $object_guid, array $message_ids){
 return connection::run('getMessagesByID', compact('objects_guids', 'message_ids'));
-}
-
-public function downloadFile($file_inline = null, $object_guid = null, $message_id = null, $name = null, $progress = null){
-$name = is_null($name) ? random_int(0, 100) : $name;
-if (empty($file_inline)){
-$message_info = self::getMessagesByID($object_guid, [$message_id]);
-if (!isset($message_info['messages'][0]['file_inline'])) 
-return 'file not found | please check param [object_guid | message_id]';
-$message_info['messages'][0]['file_inline'];
-} else
-$message_info = $file_inline;
-if (!isset($message_info['mime'], $message_info['access_hash_rec'], $message_info['size'])) 
-return 'file (info) not found';
-$MB_fileSize = $message_info['size'] / (1024 * 1024);
-$partSize = 128 * (1024 * 2);
-for ($part = 0; $part < ceil($message_info['size'] / $partSize); $part++) {
-if (is_callable($progress)) $progress('file Size (byte : '. $message_info['size'] .') , (MB : '. $MB_fileSize .') | total Part : '. ceil($message_info['size'] / $partSize) .' | upload part '. $part);
-$start_index = $part * $partSize;
-$last_index = min(($start_index + $partSize - 1), $message_info['size'] - 1);
-$data = self::requestDownloadFile($message_info['access_hash_rec'], $message_info['file_id'], $message_info['dc_id'], $last_index, $start_index, 'bytes='. $start_index .'-'. $last_index);
-file_put_contents($name .'.'. $message_info['mime'], $data, FILE_APPEND);
-}
-return $name .'.'. $message_info['mime'];
-}
-
-private function requestDownloadFile($hash, $file_id, $dc_id, $last_index, $start_index, $range) {
-$url = 'https://messenger$dc_id.iranlms.ir/GetFile.ashx';
-curl_setopt($ch = curl_init('https://messenger'. $dc_id .'.iranlms.ir/GetFile.ashx'), CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-'Access-Hash-Rec: '. $hash,
-'Auth: '. encryption::setAuth($this->auth),
-'Client-App-Name: Main',
-'Client-App-Version: 3.8.1',
-'Client-Package: app.rbmain.a',
-'Client-Platform: Android',
-'Connection: Keep-Alive',
-'Content-Length: 0',
-'Content-Type: application/json',
-'dc-id: '. $dc_id,
-'file-id: '. $file_id,
-'Host: '. parse_url($url, PHP_URL_HOST),
-'last-index: '. $last_index,
-'range: '. $range,
-'start-index: '.$start_index]);
-$result = curl_exec($ch);
-curl_close($ch);
-return $result;
-}
-
-public function requestSendFile($file_name, $mime, $size){
-return connection::run('requestSendFile', compact('file_name', 'mime', 'size'));
-}
-
-public function UploadedFile($file, string|null $costomMime = null, $progress = null){
-$file_name = pathinfo($file, PATHINFO_BASENAME);
-$file_content = @file_get_contents($file, false, stream_context_create(['ssl' => [
-'verify_peer' => false,
-'verify_peer_name' => false]]));
-if (!$file_content)
-return 'Failed to retrieve contents';
-$parts = ceil(strlen($file_content) / 128 * 1024);
-$file_size = strval(strlen($file_content));
-$pr = self::requestSendFile($file_name, is_null($costomMime) ? pathinfo($file, PATHINFO_EXTENSION) : $costomMime, $file_size);
-for ($part = 1; $part <= $parts; $part++) {
-$start = ($part - 1) * 128 * 1024;
-$data = substr($file_content, $start, min($part * 128 * 1024, strlen($file_content)) - $start);
-$response = $this->UploadFileToServer($pr['upload_url'], $data, strval(strlen($data)), $pr['id'], strval($part), $pr['access_hash_send'], strval($parts));
-if (is_callable($progress))
-$progress('file size (byte) '. $file_size .' | total part : '. $parts .' | upload part '. $part, json_encode($response));
-if (!empty($response['data']))
-return ['dc_id' => $pr['dc_id'], 'file_id' => $pr['id'], 'file_name' => $file_name, 'file_size' => $file_size, 'mime' => pathinfo($file, PATHINFO_EXTENSION), 'hash_code' => $response['data']['access_hash_rec']];
-else if ($response['status'] == 'ERROR_TRY_AGAIN' || $response['status'] == 'ERROR_GENERIC')
-return 'upload error : (ERROR_TRY_AGAIN)';
-}
-}
-
-public function sendFile($file_path, $object_guid, $reply_to_message_id = null, $captipn = '', callable|null $progress = null){
-$upload = $this->UploadedFile($file_path, $progress);
-if (!isset($upload['status']) or !$upload['status'] ?? false) 
-return 'upload error';
-$meta = self::metaData($captipn);
-$json = [
-'object_guid' => $object_guid,
-'rnd' => mt_rand(100000, 999999),
-'reply_to_message_id' => $reply_to_message_id,
-'text' => $meta['text'],
-'file_inline' => [
-'dc_id' => $upload['dc_id'],
-'file_id' => $upload['file_id'],
-'type' => 'File',
-'file_name' => $up['file_name'] .'.'. $upload['mime'],
-'size' => $upload['file_size'],
-'mime' => $upload['mime'],
-'access_hash_rec' => $upload['hash_code']]];
-if(count(($meta['data']['meta_data_parts'] ?? [])) > 0)
-$json['metadata'] = $meta['data'];
-return connection::run('sendMessage', $json);
-}
-
-public function sendMultyFile($object_guid, array $file_inline, $caption = ''){
-$meta = self::metaData($captipn);
-$json = [
-'object_guid' => $object_guid,
-'rnd' => (string) mt_rand(100000, 999999),
-'text' => $meta['text'],
-'file_inline' => $file_inline];
-if(count(($meta['data']['meta_data_parts'] ?? [])) > 0)
-$json['metadata'] = $meta['data'];
-return connection::run('sendMessage', $json);
-}
-
-public function sendLive($object_guid, $title, $device_type = 'Android', $comments_list = ['hello', 'ok']){
-return connection::run('sendLive', [
-'device_type' => $device_type,
-'object_guid' => $object_guid,
-'rnd' => random_int(1, 99),
-'suggestion_comments' => $comments_list,
-'title' => $title,
-'thumb_inline' => "\/9j\/4AAQSkZJRgABAQAAAQABAAD\/4gIoSUNDX1BST0ZJTEUAAQEAAAIYAAAAAAIQAABtbnRyUkdC\nIFhZWiAAAAAAAAAAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAA\nAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlk\nZXNjAAAA8AAAAHRyWFlaAAABZAAAABRnWFlaAAABeAAAABRiWFlaAAABjAAAABRyVFJDAAABoAAA\nAChnVFJDAAABoAAAAChiVFJDAAABoAAAACh3dHB0AAAByAAAABRjcHJ0AAAB3AAAADxtbHVjAAAA\nAAAAAAEAAAAMZW5VUwAAAFgAAAAcAHMAUgBHAEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFhZWiAA\nAAAAAABvogAAOPUAAAOQWFlaIAAAAAAAAGKZAAC3hQAAGNpYWVogAAAAAAAAJKAAAA+EAAC2z3Bh\ncmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABYWVogAAAAAAAA9tYAAQAAAADT\nLW1sdWMAAAAAAAAAAQAAAAxlblVTAAAAIAAAABwARwBvAG8AZwBsAGUAIABJAG4AYwAuACAAMgAw\nADEANv\/bAEMADQkKCwoIDQsKCw4ODQ8TIBUTEhITJxweFyAuKTEwLiktLDM6Sj4zNkY3LC1AV0FG\nTE5SU1IyPlphWlBgSlFST\/\/bAEMBDg4OExETJhUVJk81LTVPT09PT09PT09PT09PT09PT09PT09P\nT09PT09PT09PT09PT09PT09PT09PT09PT09PT\/\/AABEIADIAJQMBIgACEQEDEQH\/xAAWAAEBAQAA\nAAAAAAAAAAAAAAAAAQf\/xAAUEAEAAAAAAAAAAAAAAAAAAAAA\/8QAFQEBAQAAAAAAAAAAAAAAAAAA\nAAH\/xAAUEQEAAAAAAAAAAAAAAAAAAAAA\/9oADAMBAAIRAxEAPwDMRABUAAAAAAAAABUAAAFARQAA\nFAAf\/9k=\n"]);
-}
-
-public function sendImage($object_guid, $file_path, $reply_to_message_id, $costomMime = null, $caption = ""){
-$up = $this->UploadedFile($file_path, $costomMime);
-if (is_string($up['status']))
-return $up;
-$imageInfo = getimagesize($file_path);
-if ($imageInfo !== false)
-[$width, $height] = $imageInfo;
-$meta = self::metaData($captipn);
-$json =[
-"object_guid" => $object_guid,
-"rnd" => (string) mt_rand(100000, 999999),
-'reply_to_message_id' => $reply_to_message_id,
-'text' => $meta['text'],
-"file_inline" => [
-"dc_id" => $up["dc_id"],
-"file_id" => $up["file_id"],
-"type" => "Image",
-"file_name" => $up["file_name"] . $up["mime"],
-"size" => $up["file_size"],
-"mime" => $up["mime"],
-"thumb_inline" => self::getImageThumbInline($file_path),
-"width" => $width,
-"height" => $height,
-"access_hash_rec" => $up["hash_code"]]];
-if(count(($meta['data']['meta_data_parts'] ?? [])) > 0)
-$json['metadata'] = $meta['data'];
-return connection::run("sendMessage", $json);
-}
-
-private static function getImageThumbInline($file_path){
-$image = imagecreatefromstring(file_get_contents($file_path));
-if (!$image)
-return "\/9j\/4AAQSkZJRgABAQAAAQABAAD\/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb\/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD\/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD\/wAARCAAoACgDASIAAhEBAxEB\/8QAGwAAAgIDAQAAAAAAAAAAAAAAAAgFBwQGCQL\/xAAuEAABAwMBBgQHAQEAAAAAAAABAgMEAAURBgcIEiExQRNRcZEUM1JhgaHBIjL\/xAAYAQADAQEAAAAAAAAAAAAAAAADBAUBAv\/EACkRAAECBQMBCQEAAAAAAAAAAAIAAQMEBhEhBRIx0RMiI0FCcYGhseH\/2gAMAwEAAhEDEQA\/AHvbtcjjbDbaC3k+ISSCPLHao7VGi7rqG1TrNG1IqEma1woSlhKuDHU4PM\/c1LWzTTDTofuWo7ncXEKCm1PvJSEEdCEoCU559cVsL0eDJaDTrilAfS4U59eHGakFr8Jnw6IOjkPK557WNmM\/Q12NtdvrE2akcb3CccJPMDOevmO1VRdX7mw5wy1KBHb7V0g1VsU2a3lmSgWdTU+chYRKHG6Glnn4hBOPfrVAzNzu\/TJMj4vVUBthIUWVJSVKUewIxhPuaqy1USu3xDt7\/wASsXQIpP3BulHk3laEcCRjzPnRV6ah3W7pZJSUzrpbloKgFK8ZzhSD0JUEY9qKqBrkvEFiA8JR9Eji9nBWvF3hbgMeKxHUcYyFkGs9G8RKCPksA9j4hxSJo2iSXUBxuSFpPMKSrIP5rw5tCuZ+W9gfcmop0rInnb9v1VcKjmmwT3+G6J6Xt4acQQlTA\/f9qIkbwF3SVKTMCgfqAIFI+\/ry9rSUic4M+S8VDytTXR4EGU4rI55dUc\/usGlZIfSy7epJjyTrXnbhIuSC3cI8aS35OJyB6EcxRSNOagu6UFtM5xKT1SlZx7UU0NPysNrA2EIqhmne9\/xU1atR3O0f5hyVBpXPw1c0H8H+VsEXXrxJ+OiBYzkFlXCf3RRR4cY24dJlDEuWWazryG6eB1h9oZ5KJCgPXvRI1YkJJhKKsH\/pRGB6DrRRTIxSflAKGLPhYZ1lKSVKeZZKe2MjFFFFd7yWdmK\/\/9k=";
-$width = imagesx($image);
-$height = imagesy($image);
-if ($height > $width)
-[$newHeight, $newWidth] = [40, round($newHeight * $width / $height)];
-else
-[$newWidth, $newHeight] = [40, round($newWidth * $height / $width)];
-$thumb = imagecreatetruecolor($newWidth, $newHeight);
-imagecopyresampled($thumb, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-ob_start();
-imagepng($thumb);
-$changedImage = ob_get_contents();
-ob_end_clean();
-imagedestroy($image);
-imagedestroy($thumb);
-return base64_encode($changedImage);
 }
 
 public function getLinkFromAppUrl($app_url){
@@ -524,8 +334,7 @@ public function unBanGroupMember($group_guid, $member_guid, $action = 'Unset'){
 return connection::run("banGroupMember", compact('group_guid', 'member_guid', 'action'));
 }
 
-public function searchMemberGroup($group_guid, $search_text)
-{
+public function searchMemberGroup($group_guid, $search_text){
 return connection::run("getGroupAllMembers", compact('group_guid', 'search_text'));
 }
 
@@ -535,31 +344,6 @@ return connection::run("getGroupMessageReadParticipants", compact('group_guid', 
 
 public function forwardMessages($from, $to, $message_ids){
 return connection::run("forwardMessages", ["from_object_guid" => $from, "to_object_guid" => $to, "message_ids" => $message_ids, "rnd" => (string) random_int(12332, 987889)]);
-}
-
-public function sendGifByInfo($object_guid, $file_id, int $dc_id, $hash, $caption = "", int $size = 0, int $time = 0, int $height = 0, int $width = 0, $file_name = "SanfBot", $thumb = '')
-{
-$thumb = !empty($thumb) ? $thumb : "/9j/4AAQSkZJRgABAQAAAQABAAD/4gJASUNDX1BST0ZJTEUAAQEAAAIwAAAAAAIQAABtbnRyUkdC\nIFhZWiAAAAAAAAAAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAA\nAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlk\nZXNjAAAA8AAAAHRyWFlaAAABZAAAABRnWFlaAAABeAAAABRiWFlaAAABjAAAABRyVFJDAAABoAAA\nAChnVFJDAAABoAAAAChiVFJDAAABoAAAACh3dHB0AAAByAAAABRjcHJ0AAAB3AAAAFRtbHVjAAAA\nAAAAAAEAAAAMZW5VUwAAAFgAAAAcAHMAUgBHAEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFhZWiAA\nAAAAAABvogAAOPUAAAOQWFlaIAAAAAAAAGKZAAC3hQAAGNpYWVogAAAAAAAAJKAAAA+EAAC2z3Bh\ncmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABYWVogAAAAAAAA9tYAAQAAAADT\nLW1sdWMAAAAAAAAAAQAAAAxlblVTAAAAOAAAABwARwBvAG8AZwBsAGUAIABJAG4AYwAuACAAMgAw\nADEANgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP/bAEMAHhQWGhYTHhoYGiEfHiMsSjAsKSksW0FE\nNkprXnFvaV5oZnaFqpB2fqGAZmiUypahsLW/wL9zjtHgz7neqru/t//bAEMBHyEhLCcsVzAwV7d6\naHq3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t//AABEI\nABkALQMBIgACEQEDEQH/xAAZAAADAQEBAAAAAAAAAAAAAAABAgMEAAX/xAAqEAABAwMCBAUFAAAA\nAAAAAAABAAIDBBESITETM0FhMjRxgbEFIkJRwf/EABYBAQEBAAAAAAAAAAAAAAAAAAIBA//EABYR\nAQEBAAAAAAAAAAAAAAAAAAABEf/aAAwDAQACEQMRAD8ARmLtTv0T00ZlqsRrYdEkj6YtvGyUW11I\nK6lla0OwuHOJvfsFKsUbIRI+RmVidPRMa3NjRJfEmxtfdSjabZNAN910URdMXHTHcftA9kDhD72n\n8Sle7EgAbIvkHEflle5+UOJTWGbJSezgP4tGbqenZGS6okLmDoNEagRyeUGo0sCtEfMClFyR6FS0\npGZ0lRE7F0RsQMi3X4Wim+pNhuySKRrSfFbqq0Xl2+/yVV3IYjKWBI6nnyLbO0vcFefJTgvNpQR2\nCrF4pvdZxuUtZ1//2Q==\n";
-$meta = self::metaData($captipn);
-$json = [
-'object_guid' => $object_guid,
-'rnd' => random_int(12321, 998877),
-'text' => $meta['text'],
-'file_inline' => [
-'file_id' => $file_id,
-'mime' => 'mp4',
-'dc_id' => $dc_id,
-'access_hash_rec' => $hash,
-'file_name' => "$file_name.mp4",
-'thumb_inline' => $thumb,
-'width' => $width ? $width : 480,
-'height' => $height ? $height : 272,
-'time' => $time ? $time : 8000,
-'size' => $size ? $size : 883078,
-'type' => 'Gif']];
-if(count(($meta['data']['meta_data_parts'] ?? [])) > 0)
-$json['metadata'] = $meta['data'];
-return connection::run("sendMessage", $json);
 }
 
 public function getStickersBySetIDs($sticker_set_ids){
@@ -608,7 +392,7 @@ public function getJoinLinks($object_guid){
 return connection::run("getJoinLinks", compact('object_guid'));
 }
 
-public function livePlayer($path, $stream_Url, $stream_Key, $rotation = false){
+public static function livePlayer($path, $stream_Url, $stream_Key, $rotation = false){
 $transpose = $rotation === false ?: " -vf transpose=$rotation";
 $command = "ffmpeg -re -i {$path} -b:v 1200k -c:v libx264 -preset fast -g 50$transpose -c:a aac -b:a 128k -f flv {$stream_Url}{$stream_Key}";
 exec($command);
@@ -675,5 +459,66 @@ return connection::run("transcribeVoice", compact('object_guid', 'message_id'));
 public function is_out($user_guid){
 return $user_guid == $this->d['self']['guide'];
 }
+
+public static function imageInfo($file_path){
+$info = getimagesize($file_path);
+$img = (($info[2] == IMAGETYPE_JPEG) ? 'imagecreatefromjpeg' : 'imagecreatefrompng')($file_path);
+$thumb_image = imagecreatetruecolor($info[0], $info[1]);
+imagecopyresampled($thumb_image, $img, 0, 0, 0, 0, $info[0], $info[1], $info[0], $info[1]);
+ob_start();
+(($info[2] == IMAGETYPE_JPEG) ? 'imagejpeg' : 'imagepng')($thumb_image);
+$thumb = ob_get_contents();
+ob_end_clean();
+imagedestroy($img);
+imagedestroy($thumb_image);
+return ['thumb' => $thumb, 'width' => $info[0], 'height' => $info[1]];
+}
+
+public function sendPhoto($object_guid, $reply_to_message_id, $path, $caption = null){
+$api = connection::sendFileToAPI($path);
+$img = self::imageInfo($path);
+$meta = self::metaData($caption);
+$json = [
+'object_guid' => $object_guid,
+'reply_to_message_id' => $reply_to_message_id,
+'text' => $meta['text'],
+'rnd' => mt_rand(10000000, 999999999),
+'file_inline' => [
+'dc_id' => $api['data']['dc_id'],
+'file_id' => $api['data']['file_id'],
+'file_name' => $api['data']['file_name'],
+'size' => $api['data']['size'],
+'type' => 'Image',
+'mime' => $api['data']['mime'],
+'thumb_inline' => base64_encode($img['thumb']),
+'width' => $img['width'],
+'height' => $img['height'],
+'access_hash_rec' => $api['data']['access_hash_rec'] ]];
+if(count(($meta['data']['meta_data_parts'] ?? [])) > 0)
+$json['metadata'] = $meta['data'];
+return connection::run('sendMessage', $json);
+}
+
+public function sendDocument($object_guid, $reply_to_message_id, $path, $caption = null){
+$api = connection::sendFileToAPI($path);
+$meta = self::metaData($caption);
+$json = [
+'object_guid' => $object_guid,
+'reply_to_message_id' => $reply_to_message_id,
+'text' => $meta['text'],
+'rnd' => mt_rand(10000000, 999999999),
+'file_inline' => [
+'dc_id' => $api['data']['dc_id'],
+'file_id' => $api['data']['file_id'],
+'file_name' => $api['data']['file_name'],
+'size' => $api['data']['size'],
+'type' => 'File',
+'mime' => $api['data']['mime'],
+'access_hash_rec' => $api['data']['access_hash_rec'] ]];
+if(count(($meta['data']['meta_data_parts'] ?? [])) > 0)
+$json['metadata'] = $meta['data'];
+return connection::run('sendMessage', $json);
+}
+
 
 }

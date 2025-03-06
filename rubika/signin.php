@@ -14,13 +14,11 @@ if (($this->run('getMySessions')['status_det'] ?? '') == 'NOT_REGISTERED'){
 $code = $this->sendCode($phone);
 if(isset($code['data']['phone_code_hash'])){
 $sign = $this->signIn($phone, $code['data']['phone_code_hash'], readLine('enter code: '), $this->d['key'][0]);
-echo json_encode($sign, 448);
 if(isset($sign['data']['auth'])){
 $this->d['self']['guide'] = $sign['data']['user']['user_guid'];
 openssl_private_decrypt(base64_decode($sign['data']['auth']), $this->d['auth'], openssl_pkey_get_private($this->d['key'][1]), OPENSSL_PKCS1_OAEP_PADDING);
 parent::__construct($phone, $this->d['auth'], $this->d['key']);
 if(($reg = $this->registerDevice())['status_det'] ?? '' == 'OK'){
-echo 'logined'. PHP_EOL;
 file_put_contents(encryption::secret($phone), encryption::openssl(true, json_encode($this->d, 448), encryption::secret($phone)));
 }else
 die( json_encode($reg += ['type' => 'registerDevice']) );
