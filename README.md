@@ -9,7 +9,7 @@
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/packagist/stars/rubi/lib" alt="Stars"></a>
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/github/v/release/Amirmohammadpezeshkii/RubikaLibery" alt="Release"></a>
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/github/v/tag/Amirmohammadpezeshkii/RubikaLibery" alt="Tag"></a>
-<a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/github/directory-file-count/amirmohammadpezeshkii/RubikaLibery/rubika" alt="Files count"></a>
+<a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/github/directory-file-count/amirmohammadpezeshkii/RubikaLibery" alt="Files count"></a>
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/github/repo-size/amirmohammadpezeshkii/RubikaLibery" alt="Files size"></a>
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/github/discussions/amirmohammadpezeshkii/RubikaLibery" alt="Discussions"></a>
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/github/sponsors/amirmohammadpezeshkii" alt="Sponsors"></a>
