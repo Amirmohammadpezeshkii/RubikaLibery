@@ -25,7 +25,6 @@
     "php bot"
   ],
   "require": {
-        "textalk/websocket": "^1.6"
   },
   "autoload": {
     "psr-4": {
