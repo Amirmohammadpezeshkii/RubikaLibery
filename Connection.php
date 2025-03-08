@@ -12,11 +12,9 @@ public static $opcodes = [
 'pong' => 10];
 private $stream;
 private $read_buffer;
-private $msg_factory;
 private $options = [];
 protected $is_closing = false;
 protected $close_status = null;
-private $uid;
 
 public function __construct($stream, array $options = []){
 $this->stream = $stream;

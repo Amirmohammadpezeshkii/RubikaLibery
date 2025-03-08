@@ -23,16 +23,12 @@ protected static $default_options = [
 private $socket_uri;
 private $connection;
 private $options = [];
-private $listen = false;
 private $last_opcode = null;
 
 public function __construct($uri, $options = []){
-$this->socket_uri = str_replace('wss', 'ssl', $uri);
+preg_match('#([A-z]+)://(.*):([0-9]+)/?(.*)?#', $uri, $m);
+$this->socket_uri = ['scheme' => ($m[1] == 'wss') ? 'ssl' : 'tcp', 'authority' => $m[2], 'port' => $m[3], 'path' => (empty($m[4])) ? '/' : '/'. $m[4]];
 $this->options = array_merge(self::$default_options,$options);
-}
-
-public function __toString(){
-return sprintf("%s(%s)", get_class($this), $this->getName() ?: 'closed');
 }
 
 public function setTimeout($timeout){
@@ -125,7 +121,6 @@ return $this->isConnected() ? $this->connection->getRemoteName() : null;
 }
 
 public function getPier(){
-trigger_error('getPier() is deprecated and will be removed in future version. Use getRemoteName() instead.', E_USER_DEPRECATED);
 return $this->getRemoteName();
 }
 
@@ -144,7 +139,7 @@ $flags = STREAM_CLIENT_CONNECT;
 $flags = $persistent ? $flags | STREAM_CLIENT_PERSISTENT : $flags;
 $socket = null;
 try {
-$socket = stream_socket_client($this->socket_uri, $errno, $errstr, $this->options['timeout'], $flags, $context);
+$socket = stream_socket_client($this->socket_uri['scheme'] .'://'. $this->socket_uri['authority'] .':'. $this->socket_uri['port'], $errno, $errstr, $this->options['timeout'], $flags, $context);
 if (!$socket)
 die('No socket');
 } catch (ErrorException $e) {
@@ -155,7 +150,7 @@ if (!$this->isConnected()) {
 die("Invalid stream on \"{$host_uri->getAuthority()}\".");
 }
 
-if (!$persistent || $this->connection->tell() == 0) {
+if (!$persistent or $this->connection->tell() == 0) {
 $this->connection->setTimeout($this->options['timeout']);
 $key = self::generateKey();
 $headers = [
@@ -168,16 +163,9 @@ if (isset($this->options['origin']))
 $headers['origin'] = $this->options['origin'];
 if (isset($this->options['headers']))
 $headers = array_merge($headers, $this->options['headers']);
-$header = "GET / HTTP/1.1\r\n" . implode(
-"\r\n",
-array_map(
-function ($key, $value) {
+$header = "GET ". $this->socket_uri['path'] ." HTTP/1.1\r\n" . implode("\r\n", array_map(function ($key, $value) {
 return "$key: $value";
-},
-array_keys($headers),
-$headers
-)
-) . "\r\n\r\n";
+}, array_keys($headers), $headers)) . "\r\n\r\n";
 $this->connection->write($header);
 $response = '';
 try {
