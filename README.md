@@ -16,8 +16,8 @@
 <a href="https://packagist.org/packages/rubi/lib"  target="_blank"><img src="https://img.shields.io/github/created-at/amirmohammadpezeshkii/RubikaLibery" alt="Created-at"></a>
 </p>
 
-# Rubika-PHP
-* Rubika-PHP is a PHP Library for interaction with rubika (social network)
+## Description
+* Rubi/lib is a PHP Library for interaction with rubika (social network)
 
 ## Installation
 ```
