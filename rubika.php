@@ -140,7 +140,7 @@ sleep(mt_rand(3, 6));
 public function onUpdate(callable $callback){
 foreach (($this->servers['socket'] ?? []) as $socket)
 try{
-($client = new socket($socket, ['timeout' => 60]))->text(json_encode([
+($client = new socket($socket, ['timeout' => 60]))->send(json_encode([
 'api_version' => '6',
 'auth' => $this->d['auth'],
 'data' => json_encode(['version' => 2]),
@@ -149,7 +149,7 @@ try{
 echo 'connected '. $socket . PHP_EOL;
 while ($time ??= time() + 60 and $time >= time()) {
 if(($time ?? 0) <= time() and $time = time() +3)
-$client->text('{}');
+$client->send('{}');
 $message = json_decode($client->receive(), true);
 $callback((isset($message['data_enc'])) ? json_decode(encryption::openssl(false, $message['data_enc'], encryption::secret($this->d['auth'])), true) : $message ?? []);
 }
