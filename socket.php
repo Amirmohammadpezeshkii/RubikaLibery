@@ -4,21 +4,17 @@ namespace rubi;
 class socket{
 
 public static $opcodes = ['continuation' => 0, 'text' => 1, 'binary' => 2, 'close'=> 8, 'ping' => 9, 'pong' => 10];
-protected static $default_options = [
+protected static $def_opt = [
 'filter'=> ['text', 'binary'],
-'fragment_size' => 4096,
-'persistent'=> false,
-'return_obj'=> false,
 'timeout' => 5];
-private $url, $stream, $read_buffer;
-private $options = [];
-protected $is_closing = false;
-protected $close_status = null;
+private $url, $stream;
+private $opt = [];
+protected $close = false;
 
-public function __construct($uri, $options = []){
-preg_match('#([A-z]+)://(.*):([0-9]+)/?(.*)?#', $uri, $m);
+public function __construct($u, $opt = []){
+preg_match('#([A-z]+)://(.*):([0-9]+)/?(.*)?#', $u, $m);
 $this->url = ['scheme' => ($m[1] == 'wss') ? 'ssl' : 'tcp', 'authority' => $m[2], 'port' => $m[3], 'path' => (empty($m[4])) ? '/' : '/'. $m[4]];
-$this->options = array_merge(self::$default_options, $options);
+$this->opt = array_merge(self::$def_opt, $opt);
 }
 
 public function __destruct(){
@@ -26,114 +22,79 @@ if ($this->getType() === 'stream')
 fclose($this->stream);
 }
 
-public function send($pay, $opcode = 'text', bool $masked = true){
+public function send($p, $c = 'text', bool $m = true){
+if (!in_array($c, array_keys(self::$opcodes)) die("Bad opcode '{$opcode}'.Try 'text' or 'binary'.");
 if (!$this->isConnected()) $this->connect();
-if (!in_array($opcode, ['continuation', 'text', 'binary', 'close', 'ping', 'pong']))
-die("Bad opcode '{$opcode}'.Try 'text' or 'binary'.");
-$this->pushMessage($opcode, $pay, $masked);
+$this->pushMessage($c, $p, $m);
 }
 
 public function receive(){
-if (!$this->isConnected())
-$this->connect();
-while (true) {
-$msg = $this->pullMessage();
-if (in_array($msg[0][2], $this->options['filter'])) {
-[$return] = [$this->options['return_obj'] ? $msg : $msg[0][1]];
+while ($this->isConnected() ? true : $this->connect() and $m = $this->pullMessage())
+if (in_array($m[0][2], $this->opt['filter']) and $r = $m[0][1])
 break;
-} elseif ($msg[0][2] == 'close') {
-[$return] = [$this->options['return_obj'] ? $msg : null];
+else if ($m[0][2] == 'close' and $r = '')
 break;
-}
-}
-return $return;
+return $r;
 }
 
-protected function connect(): void{
-if (isset($this->options['context'])) {
-if (@get_resource_type($this->options['context']) === 'stream-context')
-$context = $this->options['context'];
-else
-die("Stream context in \$options['context'] isn't a valid context.");
-} else
-$context = stream_context_create();
-$persistent = $this->options['persistent'] === true;
-$flags = STREAM_CLIENT_CONNECT;
-$flags = $persistent ? $flags | STREAM_CLIENT_PERSISTENT : $flags;
-try {
-$this->stream = stream_socket_client($this->url['scheme'] .'://'. $this->url['authority'] .':'. $this->url['port'], $errno, $errstr, $this->options['timeout'], $flags, $context);
-if (!$this->stream)
+protected function connect(){
+if(!($this->stream = stream_socket_client($this->url['scheme'] .'://'. $this->url['authority'] .':'. $this->url['port'], $errno, $errstr, $this->opt['timeout'], STREAM_CLIENT_CONNECT, stream_context_create())))
 die('No socket');
-} catch (ErrorException $e) {
-die("Could not open socket to \"{$host_uri->getAuthority()}\": {$e->getMessage()} ({$e->getCode()}).");
-}
 if (!$this->isConnected())
 die("Invalid stream");
-if (!$persistent or $this->tell() == 0) {
-$this->setTimeout($this->options['timeout']);
-$key = self::generateKey();
-$headers = [
+$this->setTimeout($this->opt['timeout']);
+$h = [
 'User-Agent'=> 'websocket-client-php',
 'Connection'=> 'Upgrade',
 'Upgrade' => 'websocket',
-'Sec-WebSocket-Key' => $key,
+'Sec-WebSocket-Key' => $key = self::generateKey(),
 'Sec-WebSocket-Version' => '13'];
-if (isset($this->options['origin']))
-$headers['origin'] = $this->options['origin'];
-if (isset($this->options['headers']))
-$headers = array_merge($headers, $this->options['headers']);
-$header = "GET ". $this->url['path'] ." HTTP/1.1\r\n" . implode("\r\n", array_map(function ($key, $value) {
-return "$key: $value";
-}, array_keys($headers), $headers)) . "\r\n\r\n";
-$this->write($header);
-$response = '';
-try {
+if (isset($this->opt['origin']))
+$h['origin'] = $this->opt['origin'];
+if (isset($this->opt['headers']))
+$h = array_merge($headers, $this->opt['headers']);
+$this->write("GET ". $this->url['path'] ." HTTP/1.1\r\n" . implode("\r\n", array_map(function ($k, $v) {
+return $k .': '. $v;
+}, array_keys($h), $h)) . "\r\n\r\n");
+$r = '';
 do {
-$response .= $this->gets(1024);
-} while (substr_count($response, "\r\n\r\n") == 0);
-} catch (Exception $e) {
-die('Client handshake error', $e->getCode(), $e->getData(), $e);
-}
-if (!preg_match('#Sec-WebSocket-Accept:\s(.*)$#mUi', $response, $matches)) 
-die(sprintf("Connection' failed: Server sent invalid upgrade response: %s", $response));
-if (trim($matches[1]) !== base64_encode(pack('H*', sha1($key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'))))
+$r .= $this->gets(1024);
+} while (substr_count($r, "\r\n\r\n") == 0);
+if (!preg_match('#Sec-WebSocket-Accept:\s(.*)$#mUi', $r, $m)) 
+die(sprintf("Connection' failed: Server sent invalid upgrade response: %s", $r));
+if (trim($m[1]) !== base64_encode(pack('H*', sha1($key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'))))
 die('Server sent bad upgrade response.');
-}
+return true;
 }
 
-public function getFrames($optcode, $pay, $masked = true, $fSize = 4096, $f = []){
-foreach (str_split($pay, $fSize) as $p)
-$f[] = [false, $p, 'continuation', $masked];
-$f[0][2] = $optcode;
+public function getFrames($c, $p, $m = true, $fs = 4096, $f = []){
+foreach (str_split($p, $fs) as $i)
+$f[] = [false, $i, 'continuation', $m];
+$f[0][2] = $c;
 $f[array_key_last($f)][0] = true;
 return $f;
 }
 
-public function pushMessage($optcode, $pay, $masked = true){
-$f = $this->getFrames($optcode, $pay, $masked, $this->options['fragment_size']);
+public function pushMessage($code, $pay, $masked = true){
+$f = $this->getFrames($code, $pay, $masked);
 foreach ($f as $frame)
 $this->pushFrame($frame);
 }
 
 public function pullMessage(){
 do {
-list ($final, $payload, $opcode, $masked) = $this->autoRespond($this->pullFrame());
-if ($opcode == 'close')
+list ($f, $p, $o, $m) = $this->autoRespond($this->pullFrame());
+if ($o == 'close')
 $this->close();
-$payload_opcode = ($opcode == 'continuation') ? $this->read_buffer['opcode'] : $opcode;
-if (!$final and !($opcode == 'continuation')) {
-$this->read_buffer = ['opcode' => $opcode, 'payload' => $payload, 'frames' => 1];
+$pc = ($o == 'continuation') ? $rb['opcode'] : $o;
+if (!$f and !($o == 'continuation') and $rb = ['opcode' => $o, 'payload' => $p, 'frames' => 1])
 continue;
-}
-if ($opcode == 'continuation') {
-$this->read_buffer['payload'] .= $payload;
-$this->read_buffer['frames']++;
-}
-} while (!$final);
-$frames = 1;
-if ($opcode == 'continuation')
-[$payload, $frames, $this->read_buffer] = [$this->read_buffer['payload'], $this->read_buffer['frames'], null];
-return $this->getFrames($payload_opcode, $payload);
+if ($o == 'continuation' and $rb['payload'] .= $p)
+$rb['frames']++;
+} while (!$f);
+if ($o == 'continuation')
+[$p, $f] = [$rb['payload'], $rb['frames']];
+return $this->getFrames($pc, $p);
 }
 
 private function pullFrame(){
@@ -197,26 +158,24 @@ $this->write($data);
 }
 
 private function autoRespond($frame){
-list ($final, $payload, $opcode, $masked) = $frame;
-switch ($opcode) {
+list ($f, $p, $c, $m) = $frame;
+switch ($c) {
 case 'ping':
-$this->pushMessage('pong', $payload, $masked);
-return [$final, $payload, $opcode, $masked];
+$this->pushMessage('pong', $p, $m);
+return [$f, $p, $c, $m];
 case 'close':
-$status_bin = '';
-$status = '';
-if (strlen($payload) > 0)
-[$status_bin, $status, $this->close_status] = [$payload[0] . $payload[1], current(unpack('n', $payload)), $status];
-if (strlen($payload) >= 2)
-$payload = substr($payload, 2);
-if (!$this->is_closing)
-$this->pushMessage('close', "{$status_bin}Close acknowledged: {$status}", $masked);
+if (strlen($p) > 0)
+[$sb, $s] = [$p[0] . $p[1], current(unpack('n', $p)), $s];
+if (strlen($p) >= 2)
+$p = substr($p, 2);
+if (!$this->close)
+$this->pushMessage('close', ($sb ?? '') .'Close acknowledged: '. ($s ?? ''), $m);
 else
-$this->is_closing = false;
+$this->close = false;
 $this->disconnect();
-return [$final, $payload, $opcode, $masked];
+return [$f, $p, $c, $m];
 default:
-return [$final, $payload, $opcode, $masked];
+return [$f, $p, $c, $m];
 }
 }
 
@@ -225,21 +184,15 @@ if ($this->isConnected()) return fclose($this->stream);
 }
 
 public function isConnected(): bool{
-return in_array($this->getType(), ['stream', 'persistent stream']);
+return in_array($this->getType(), ['stream']);
 }
 
 public function getType(){
 return ($this->stream ?? false) ? get_resource_type($this->stream) : null;
 }
 
-public function tell(){
-if (!($t = ftell($this->stream)))
-die('Could not resolve stream pointer position');
-return $t;
-}
-
 public function setTimeout($s, $m = 0){
-$this->options['timeout'] = $s;
+$this->opt['timeout'] = $s;
 if (!$this->isConnected()) return;
 return stream_set_timeout($this->stream, $s, $m);
 }
@@ -259,8 +212,7 @@ else if (!($r = fread($this->stream, $l - strlen($d))))
 die("Broken frame");
 else if ($r === '')
 die("Empty read; connection dead?");
-else
-$d .= $r;
+else $d .= $r;
 return $d;
 }
 
@@ -270,14 +222,12 @@ if ($w < strlen($d)) die("Could only write {$w} out of ". strlen($d) ." bytes.")
 return $w;
 }
 
-public function close($s = 1000, $msg = 'ttfn'){
+public function close($s = 1000, $msg = 'ttfn', $ss = ''){
 if (!$this->isConnected()) return;
-$ss = '';
-foreach (str_split(sprintf('%016b', $s), 8) as $bin)
-$ss .= chr(bindec($bin));
+foreach (str_split(sprintf('%016b', $s), 8) as $b)
+$ss .= chr(bindec($b));
 $this->pushMessage('close', $ss . $msg, true);
-$this->is_closing = true;
-while (true)
+while ($this->close = true)
 if ($this->pullMessage()[0][2] == 'close')
 break;
 }

@@ -139,7 +139,6 @@ sleep(mt_rand(3, 6));
 
 public function onUpdate(callable $callback){
 foreach (($this->servers['socket'] ?? []) as $socket)
-try{
 ($client = new socket($socket, ['timeout' => 60]))->send(json_encode([
 'api_version' => '6',
 'auth' => $this->d['auth'],
@@ -152,10 +151,6 @@ if(($time ?? 0) <= time() and $time = time() +3)
 $client->send('{}');
 $message = json_decode($client->receive(), true);
 $callback((isset($message['data_enc'])) ? json_decode(encryption::openssl(false, $message['data_enc'], encryption::secret($this->d['auth'])), true) : $message ?? []);
-}
-}catch(Throwable $e){
-sleep(5);
-continue;
 }
 $client->close();
 }
@@ -218,8 +213,8 @@ public function getAvatars($object_guid){
 return self::run('getAvatars', compact('object_guid'));
 }
 
-public function sendChatActivity($object_guid, $action) /*Typing , Uploading, Recording*/{
-return self::run('sendChatActivity', ['object_guid' => $object_guid, 'activity' => $action->value]);
+public function sendChatActivity($object_guid, $activity) /*Typing , Uploading, Recording*/{
+return self::run('sendChatActivity', compact('object_guid', 'activity'));
 }
 
 public static function metaData($text, $result = []){
