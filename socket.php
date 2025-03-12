@@ -13,14 +13,14 @@ protected static $default_options = [
 'persistent'=> false,
 'return_obj'=> false,
 'timeout' => 5];
-private $socket_uri, $connection, $stream, $read_buffer;
+private $url, $stream, $read_buffer;
 private $options = [];
 protected $is_closing = false;
 protected $close_status = null;
 
 public function __construct($uri, $options = []){
 preg_match('#([A-z]+)://(.*):([0-9]+)/?(.*)?#', $uri, $m);
-$this->socket_uri = ['scheme' => ($m[1] == 'wss') ? 'ssl' : 'tcp', 'authority' => $m[2], 'port' => $m[3], 'path' => (empty($m[4])) ? '/' : '/'. $m[4]];
+$this->url = ['scheme' => ($m[1] == 'wss') ? 'ssl' : 'tcp', 'authority' => $m[2], 'port' => $m[3], 'path' => (empty($m[4])) ? '/' : '/'. $m[4]];
 $this->options = array_merge(self::$default_options, $options);
 }
 
@@ -52,10 +52,6 @@ break;
 return $return;
 }
 
-public function getCloseStatus(){
-return $this->close_status;
-}
-
 protected function connect(): void{
 if (isset($this->options['context'])) {
 if (@get_resource_type($this->options['context']) === 'stream-context')
@@ -68,7 +64,7 @@ $persistent = $this->options['persistent'] === true;
 $flags = STREAM_CLIENT_CONNECT;
 $flags = $persistent ? $flags | STREAM_CLIENT_PERSISTENT : $flags;
 try {
-$this->stream = stream_socket_client($this->socket_uri['scheme'] .'://'. $this->socket_uri['authority'] .':'. $this->socket_uri['port'], $errno, $errstr, $this->options['timeout'], $flags, $context);
+$this->stream = stream_socket_client($this->url['scheme'] .'://'. $this->url['authority'] .':'. $this->url['port'], $errno, $errstr, $this->options['timeout'], $flags, $context);
 if (!$this->stream)
 die('No socket');
 } catch (ErrorException $e) {
@@ -89,7 +85,7 @@ if (isset($this->options['origin']))
 $headers['origin'] = $this->options['origin'];
 if (isset($this->options['headers']))
 $headers = array_merge($headers, $this->options['headers']);
-$header = "GET ". $this->socket_uri['path'] ." HTTP/1.1\r\n" . implode("\r\n", array_map(function ($key, $value) {
+$header = "GET ". $this->url['path'] ." HTTP/1.1\r\n" . implode("\r\n", array_map(function ($key, $value) {
 return "$key: $value";
 }, array_keys($headers), $headers)) . "\r\n\r\n";
 $this->write($header);
@@ -106,18 +102,6 @@ die(sprintf("Connection' failed: Server sent invalid upgrade response: %s", $res
 if (trim($matches[1]) !== base64_encode(pack('H*', sha1($key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'))))
 die('Server sent bad upgrade response.');
 }
-}
-
-public function close($status = 1000, $message = 'ttfn'){
-if (!$this->isConnected()) return;
-$status_str = '';
-foreach (str_split(sprintf('%016b', $status), 8) as $binstr)
-$status_str .= chr(bindec($binstr));
-$this->pushMessage('close', $status_str . $message, true);
-$this->is_closing = true;
-while (true)
-if ($this->pullMessage()->getOpcode() == 'close')
-break;
 }
 
 public function getFrames($optcode, $payload, $masked = true, $framesize = 4096, $frames = []){
@@ -140,19 +124,18 @@ do {
 list ($final, $payload, $opcode, $masked) = $this->autoRespond($this->pullFrame());
 if ($opcode == 'close')
 $this->close();
-$continuation = $opcode == 'continuation';
-$payload_opcode = $continuation ? $this->read_buffer['opcode'] : $opcode;
-if (!$final and !$continuation) {
+$payload_opcode = ($opcode == 'continuation') ? $this->read_buffer['opcode'] : $opcode;
+if (!$final and !($opcode == 'continuation')) {
 $this->read_buffer = ['opcode' => $opcode, 'payload' => $payload, 'frames' => 1];
 continue;
 }
-if ($continuation) {
+if ($opcode == 'continuation') {
 $this->read_buffer['payload'] .= $payload;
 $this->read_buffer['frames']++;
 }
 } while (!$final);
 $frames = 1;
-if ($continuation)
+if ($opcode == 'continuation')
 [$payload, $frames, $this->read_buffer] = [$this->read_buffer['payload'], $this->read_buffer['frames'], null];
 return $this->getFrames($payload_opcode, $payload);
 }
@@ -254,46 +237,62 @@ return ($this->stream ?? false) ? get_resource_type($this->stream) : null;
 }
 
 public function tell(){
-if (!($tell = ftell($this->stream)))
+if (!($t = ftell($this->stream)))
 die('Could not resolve stream pointer position');
-return $tell;
+return $t;
 }
 
-public function setTimeout($seconds, $microseconds = 0){
-$this->options['timeout'] = $seconds;
+public function setTimeout($s, $m = 0){
+$this->options['timeout'] = $s;
 if (!$this->isConnected()) return;
-return stream_set_timeout($this->stream, $seconds, $microseconds);
+return stream_set_timeout($this->stream, $s, $m);
 }
 
-public function gets($length){
-if (!($line = fgets($this->stream, $length)))
+public function gets($l){
+if (!($g = fgets($this->stream, $l)))
 die('Could not read from stream');
-return $line;
+return $g;
 }
 
-public function read($length){
-$data = '';
-while (strlen($data) < $length)
+public function read($l){
+$d = '';
+while (strlen($d) < $l)
 if (!empty(stream_get_meta_data($this->stream)['timed_out']))
 die('Client read timeout');
-else if (!($buffer = fread($this->stream, $length - strlen($data))))
+else if (!($r = fread($this->stream, $l - strlen($d))))
 die("Broken frame");
-else if ($buffer === '')
+else if ($r === '')
 die("Empty read; connection dead?");
 else
-$data .= $buffer;
-return $data;
+$d .= $r;
+return $d;
 }
 
-public function write($data){
-if (!($written = fwrite($this->stream, $data))) die("Failed to write");
-if ($written < strlen($data)) die("Could only write {$written} out of ". strlen($data) ." bytes.");
-return $written;
+public function write($d){
+if (!($w = fwrite($this->stream, $d))) die("Failed to write");
+if ($w < strlen($d)) die("Could only write {$w} out of ". strlen($d) ." bytes.");
+return $w;
 }
 
-protected static function generateKey($length = 16, $key = ''){
-for ($i = 0; $i < $length; $i++)
-$key .= chr(rand(33, 126));
-return base64_encode($key);
+public function getCloseStatus(){
+return $this->close_status;
+}
+
+public function close($status = 1000, $message = 'ttfn'){
+if (!$this->isConnected()) return;
+$status_str = '';
+foreach (str_split(sprintf('%016b', $status), 8) as $binstr)
+$status_str .= chr(bindec($binstr));
+$this->pushMessage('close', $status_str . $message, true);
+$this->is_closing = true;
+while (true)
+if ($this->pullMessage()->getOpcode() == 'close')
+break;
+}
+
+protected static function generateKey($l = 16, $k = ''){
+for ($i = 0; $i < $l; $i++)
+$k .= chr(rand(33, 126));
+return base64_encode($k);
 }
 }
