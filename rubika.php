@@ -140,7 +140,7 @@ sleep(mt_rand(3, 6));
 public function onUpdate(callable $callback){
 foreach (($this->servers['socket'] ?? []) as $socket)
 try{
-($client = new client($socket, ['timeout' => 60]))->text(json_encode([
+($client = new socket($socket, ['timeout' => 60]))->text(json_encode([
 'api_version' => '6',
 'auth' => $this->d['auth'],
 'data' => json_encode(['version' => 2]),
