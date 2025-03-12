@@ -5,11 +5,8 @@ class socket{
 
 public static $opcodes = ['continuation' => 0, 'text' => 1, 'binary' => 2, 'close'=> 8, 'ping' => 9, 'pong' => 10];
 protected static $default_options = [
-'context' => null,
 'filter'=> ['text', 'binary'],
 'fragment_size' => 4096,
-'headers' => null,
-'origin'=> null,
 'persistent'=> false,
 'return_obj'=> false,
 'timeout' => 5];
@@ -29,23 +26,23 @@ if ($this->getType() === 'stream')
 fclose($this->stream);
 }
 
-public function send($payload, $opcode = 'text', bool $masked = true): void{
+public function send($pay, $opcode = 'text', bool $masked = true){
 if (!$this->isConnected()) $this->connect();
 if (!in_array($opcode, ['continuation', 'text', 'binary', 'close', 'ping', 'pong']))
 die("Bad opcode '{$opcode}'.Try 'text' or 'binary'.");
-$this->pushMessage($opcode, $payload, $masked);
+$this->pushMessage($opcode, $pay, $masked);
 }
 
 public function receive(){
 if (!$this->isConnected())
 $this->connect();
 while (true) {
-$message = $this->pullMessage();
-if (in_array($message[0][2], $this->options['filter'])) {
-[$return] = [$this->options['return_obj'] ? $message : $message[0][1]];
+$msg = $this->pullMessage();
+if (in_array($msg[0][2], $this->options['filter'])) {
+[$return] = [$this->options['return_obj'] ? $msg : $msg[0][1]];
 break;
-} elseif ($message[0][2] == 'close') {
-[$return] = [$this->options['return_obj'] ? $message : null];
+} elseif ($msg[0][2] == 'close') {
+[$return] = [$this->options['return_obj'] ? $msg : null];
 break;
 }
 }
@@ -104,18 +101,17 @@ die('Server sent bad upgrade response.');
 }
 }
 
-public function getFrames($optcode, $payload, $masked = true, $framesize = 4096, $frames = []){
-$split = str_split($payload, $framesize) ?: [''];
-foreach ($split as $pay)
-$frames[] = [false, $pay, 'continuation', $masked];
-$frames[0][2] = $optcode;
-$frames[array_key_last($frames)][0] = true;
-return $frames;
+public function getFrames($optcode, $pay, $masked = true, $fSize = 4096, $f = []){
+foreach (str_split($pay, $fSize) as $p)
+$f[] = [false, $p, 'continuation', $masked];
+$f[0][2] = $optcode;
+$f[array_key_last($f)][0] = true;
+return $f;
 }
 
-public function pushMessage($optcode, $payload, $masked = true){
-$frames = $this->getFrames($optcode, $payload, $masked, $this->options['fragment_size']);
-foreach ($frames as $frame)
+public function pushMessage($optcode, $pay, $masked = true){
+$f = $this->getFrames($optcode, $pay, $masked, $this->options['fragment_size']);
+foreach ($f as $frame)
 $this->pushFrame($frame);
 }
 
@@ -174,7 +170,7 @@ return [$final, $payload, $opcode, $masked];
 }
 
 private function pushFrame($frame){
-list ($final, $payload, $opcode, $masked) = $frame;
+list ($final, $payload, $opcode, $masked) = [$frame[0] , ($frame[1] ?? ''), $frame[2] , ($frame[3] ?? true)];
 $data = '';
 $byte_1 = $final ? 0b10000000 : 0b00000000;
 $byte_1 |= self::$opcodes[$opcode];
@@ -274,19 +270,15 @@ if ($w < strlen($d)) die("Could only write {$w} out of ". strlen($d) ." bytes.")
 return $w;
 }
 
-public function getCloseStatus(){
-return $this->close_status;
-}
-
-public function close($status = 1000, $message = 'ttfn'){
+public function close($s = 1000, $msg = 'ttfn'){
 if (!$this->isConnected()) return;
-$status_str = '';
-foreach (str_split(sprintf('%016b', $status), 8) as $binstr)
-$status_str .= chr(bindec($binstr));
-$this->pushMessage('close', $status_str . $message, true);
+$ss = '';
+foreach (str_split(sprintf('%016b', $s), 8) as $bin)
+$ss .= chr(bindec($bin));
+$this->pushMessage('close', $ss . $msg, true);
 $this->is_closing = true;
 while (true)
-if ($this->pullMessage()->getOpcode() == 'close')
+if ($this->pullMessage()[0][2] == 'close')
 break;
 }
 
