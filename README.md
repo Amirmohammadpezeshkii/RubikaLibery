@@ -31,7 +31,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 use rubi\rubika;
 
 $account = new rubika(989123456789); // Only without zero and with area code 98
-$account->onUpdate(function (array $update) use ($account) {
+$account->onUpdate(function ($update = []) use ($account) {
     if (isset($update['message_updates'])) {
         $message = $update['message_updates'];
         // other code
