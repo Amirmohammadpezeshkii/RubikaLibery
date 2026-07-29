@@ -10,20 +10,25 @@ private static $c = [
 'platform' => 'Web'];
 public $servers, $d;
 
-public function __construct($phone){
-getDCs:
+public function __construct($phone, $pass_key = null){
 $this->servers = (file_exists(__DIR__ .'/servers')) ? json_decode(file_get_contents(__DIR__ .'/servers'), true) : self::getDCs();
 file_put_contents(__DIR__ .'/servers', json_encode($this->servers, 448));
-if((filectime(__DIR__ .'/servers') + (6 * 60 * 60)) < time())
-unlink(__DIR__ .'/servers');
+if((filectime(__DIR__ .'/servers') + (6 * 60 * 60)) < time()) unlink(__DIR__ .'/servers');
 $this->d = file_exists(encryption::secret($phone)) ? json_decode(encryption::openssl(false, file_get_contents(encryption::secret($phone)), encryption::secret($phone)), true) : [];
 $this->d['auth'] ??= encryption::hash();
 $this->d['key'] ??= encryption::crKeys();
-if (($this->run('getMySessions')['status_det'] ?? '') == 'NOT_REGISTERED')
-self::login($phone);
+if (($is = $this->run('getMySessions')) and ($is['status_det'] ?? '') == 'NOT_REGISTERED'){
+self::login($phone, $pass_key);
+}else if(isset($is['error']))
+die(json_encode($is, 448));
+echo '• connected to rubika ( '. $phone .' )'. PHP_EOL;
+if (method_exists($this, 'update'))
+$this->onUpdate();
+else
+echo 'To use update create public function update'. PHP_EOL;
 }
 
-function login($phone){
+function login($phone, $pass_key = null){
 if(!empty($this->d['code']['hash']) and $this->d['code']['time'] + 60 >= time()){
 inputCode:
 if(http_response_code() and empty($_POST['code'])){
@@ -42,7 +47,7 @@ die( json_encode($reg += ['type' => 'registerDevice']) );
 }else
 die( json_encode($sign += ['type' => 'sginIn']) );
 }
-}else if($sendCode = $this->sendCode($phone) and !empty($sendCode['data']['phone_code_hash'])){
+}else if($sendCode = $this->sendCode($phone, $pass_key) and !empty($sendCode['data']['phone_code_hash'])){
 [$this->d['code']['hash'], $this->d['code']['time']] = [$sendCode['data']['phone_code_hash'], time()];
 goto inputCode;
 }else
@@ -51,6 +56,7 @@ file_put_contents(encryption::secret($phone), encryption::openssl(true, json_enc
 }
 
 public static function req($u, $d = []){
+echo 'request to: '. $u . PHP_EOL;
 curl_setopt($ch = curl_init($u), CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
 'Connection: keep-alive',
@@ -62,10 +68,13 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($d));
 $result = curl_exec($ch);
 //curl_close($ch);
+if($e = curl_error($ch))
+return json_encode(['error' => $e]);
 return json_decode($result, true);
 }
 
 public function run($m, $i = [], $t = false){
+echo 'use method: '. $m . PHP_EOL;
 $d = [
 'api_version' => '6',
 (($t) ? 'tmp_session' : 'auth') => ((!$t) ? encryption::setAuth($this->d['auth']) : $this->d['auth']),
@@ -77,6 +86,7 @@ if(!$t) $d['sign'] = encryption::sign($s, $this->d['key'][1]);
 foreach (($this->servers['API'] ?? []) as $url)
 if (isset(($r = self::req($url, $d))['data_enc']))
 return json_decode(encryption::openssl(false, $r['data_enc'], encryption::secret($this->d['auth'])), true);
+else
 return json_decode($r, true);
 }
 
@@ -141,26 +151,29 @@ else
 sleep(mt_rand(3, 6));
 }
 
-public function onUpdate(callable $callback){
-foreach (($this->servers['socket'] ?? []) as $socket)
-($client = new socket($socket, ['timeout' => 60]))->send(json_encode([
+public function onUpdate(){
+shuffle($this->servers['socket']);
+foreach($this->servers['socket'] as $socket)
+if(($client = new socket($socket, ['timeout' => 60]))->isConnected()) break;
+$client->send(json_encode([
 'api_version' => '6',
 'auth' => $this->d['auth'],
 'data' => json_encode(['version' => 2]),
 'method' => 'handShake',
 'client' => self::$c]));
-echo 'connected '. $socket . PHP_EOL;
-while ($time ??= time() + 60 and $time >= time()) {
-if(($time ?? 0) <= time() and $time = time() +3)
+echo '• connected to socket ( '. $socket .' )'. PHP_EOL;
+while ($client->isConnected())
+if(($_t ?? 0) <= time() and $_t = time() +2){
+echo 'getting new updates...'. PHP_EOL;
 $client->send('{}');
 $message = json_decode($client->receive(), true);
-$callback((isset($message['data_enc'])) ? json_decode(encryption::openssl(false, $message['data_enc'], encryption::secret($this->d['auth'])), true) : $message ?? []);
+$this->update((isset($message['data_enc'])) ? json_decode(encryption::openssl(false, $message['data_enc'], encryption::secret($this->d['auth'])), true) : $message ?? []);
 }
 $client->close();
 }
 
-public function sendCode($phone_number, $send_type = 'SMS'){
-return $this->run('sendCode', compact('phone_number', 'send_type'), true);
+public function sendCode($phone_number, $pass_key = null, $send_type = 'SMS'){
+return $this->run('sendCode', compact('phone_number', 'pass_key', 'send_type'), true);
 }
 
 public function registerDevice($token_type = 'Web', $token = '', $app_version = 'WB_4.4.29', $lang_code = 'fa', $system_version = 'Windows 10', $device_model = 'Chrome 4', $is_multi_account = false){
@@ -223,26 +236,28 @@ return self::run('sendChatActivity', compact('object_guid', 'activity'));
 }
 
 public static function metaData($text, $result = []){
+$text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
+$text = str_replace(['ي', 'ك'], ['ی', 'ک'], $text);
 $p ='/```(.*?)```|\*\*(.*?)\*\*|`(.*?)`|__(.*?)__|--(.*?)--|~~(.*?)~~|\|\|(.*?)\|\||\[(.*?)\]\(\s*(https?:\/\/\S+|g0|u0|c0|[^\s]+)\s*\)/us';
 while(preg_match($p, $text, $m)){
 if(str_contains($m[0], '```'))
 $result[] = ['type' => 'Pre', 'lang' => explode('\n', trim($m[0], '`'))[0], 'from_index' => mb_strpos($text, '`'), 'length' => mb_strlen($m[0]) -6];
 else if(str_contains($m[0], '**'))
-$result[] = ['type' => 'Bold', 'from_index' => mb_strpos($text, '**'), 'length' => mb_strlen($m[0]) -4];
+$result[] = ['type' => 'Bold', 'from_index' => mb_strpos($text, '**', 0, 'UTF-8'), 'length' => mb_strlen($m[0]) -4];
 else if(str_contains($m[0], '`'))
-$result[] = ['type' => 'Mono', 'from_index' => mb_strpos($text, '`'), 'length' => mb_strlen($m[0]) -2];
+$result[] = ['type' => 'Mono', 'from_index' => mb_strpos($text, '`', 0, 'UTF-8'), 'length' => mb_strlen($m[0]) -2];
 else if(str_contains($m[0], '__'))
-$result[] = ['type' => 'Italic', 'from_index' => mb_strpos($text, '__'), 'length' => mb_strlen($m[0]) -4];
+$result[] = ['type' => 'Italic', 'from_index' => mb_strpos($text, '__', 0, 'UTF-8'), 'length' => mb_strlen($m[0]) -4];
 else if(str_contains($m[0], '--'))
-$result[] = ['type' => 'Underline', 'from_index' => mb_strpos($text, '--'), 'length' => mb_strlen($m[0]) -4];
+$result[] = ['type' => 'Underline', 'from_index' => mb_strpos($text, '--', 0, 'UTF-8'), 'length' => mb_strlen($m[0]) -4];
 else if(str_contains($m[0], '~~'))
-$result[] = ['type' => 'Strike', 'from_index' => mb_strpos($text, '~~'), 'length' => mb_strlen($m[0]) -4];
+$result[] = ['type' => 'Strike', 'from_index' => mb_strpos($text, '~~', 0, 'UTF-8'), 'length' => mb_strlen($m[0]) -4];
 else if(str_contains($m[0], '||'))
-$result[] = ['type' => 'Spoiler', 'from_index' => mb_strpos($text, '||'), 'length' => mb_strlen($m[0]) -4];
+$result[] = ['type' => 'Spoiler', 'from_index' => mb_strpos($text, '||', 0, 'UTF-8'), 'length' => mb_strlen($m[0]) -4];
 else if(!empty($m[9]) and self::object_type($m[9]))
-$result[] = ['type' => 'MentionText', 'mention_text_object_guid' => $m[9], 'mention_text_object_type' => self::object_type($m[9]), 'from_index' => mb_strpos($text, '['), 'length' => mb_strlen($m[8])];
+$result[] = ['type' => 'MentionText', 'mention_text_object_guid' => $m[9], 'mention_text_object_type' => self::object_type($m[9]), 'from_index' => mb_strpos($text, '[', 0, 'UTF-8'), 'length' => mb_strlen($m[8]) +1];
 else if(!empty($m[9]))
-$result[] = ['type' => 'Link', 'link' => ['type' => 'hyperlink', 'hyperlink_data' => ['url' => $m[9]]], 'from_index' => mb_strpos($text, '['), 'length' => mb_strlen($m[8])];
+$result[] = ['type' => 'Link', 'link' => ['type' => 'hyperlink', 'hyperlink_data' => ['url' => $m[9]]], 'from_index' => mb_strpos($text, '['), 'length' => mb_strlen($m[8]) +1];
 $text = preg_replace($p, "$1$2$3$4$5$6$7$8", $text, 1);
 }
 return ['data' => ['meta_data_parts' => $result], 'text' => trim($text)];
@@ -251,6 +266,8 @@ return ['data' => ['meta_data_parts' => $result], 'text' => trim($text)];
 public static function object_type($object_guid){
 if(str_contains($object_guid, 'u'))
 return 'User';
+else if(str_contains($object_guid, 'b'))
+return 'Bot';
 else if(str_contains($object_guid, 'c'))
 return 'Channel';
 else if(str_contains($object_guid, 'g'))
@@ -517,7 +534,7 @@ return self::run("getStickersBySetIDs", compact('sticker_set_ids'));
 }
 
 public function uploadAvatar($thumbnail_file_id, $main_file_id){
-return self::run("uploadAvatar", compact('thumbnail_file_id', 'main_file_id'));
+return self::run("uploadAvatar", compact('thumbnail_file_id', 'main_file_id'), true);
 }
 
 public function addChannel($title, $channel_type = 'Private', $member_guids = null){ /*Public, Private*/
@@ -528,7 +545,7 @@ public function setBlockUser($user_guid, $action){ /*Block, Unblock*/
 return self::run("setBlockUser", compact('user_guid', 'action'));
 }
 
-public function setPinMessage($object_guid, int $message_id, $action){ /*Pin, Unpin*/
+public function setPinMessage($object_guid, $message_id, $action){ /*Pin, Unpin*/
 return self::run("setPinMessage", compact('object_guid', 'message_id', 'action'));
 }
 

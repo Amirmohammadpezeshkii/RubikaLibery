@@ -23,8 +23,8 @@ fclose($this->stream);
 }
 
 public function send($p, $c = 'text', bool $m = true){
-if (!in_array($c, array_keys(self::$opcodes)) die("Bad opcode '{$opcode}'.Try 'text' or 'binary'.");
-if (!$this->isConnected()) $this->connect();
+if (!in_array($c, array_keys(self::$opcodes))) die("Bad opcode '{$opcode}'.Try 'text' or 'binary'.");
+if (!$this->isConnected() and !$this->connect()) return false;
 $this->pushMessage($c, $p, $m);
 }
 
@@ -100,14 +100,14 @@ return $this->getFrames($pc, $p);
 private function pullFrame(){
 $data = $this->read(2);
 list ($byte_1, $byte_2) = array_values(unpack('C*', $data));
-$final = (bool)($byte_1 & 0b10000000);
+$final = (bool) ($byte_1 & 0b10000000);
 $rsv = $byte_1 & 0b01110000;
 $opcode_int= $byte_1 & 0b00001111;
 $opcode_ints = array_flip(self::$opcodes);
 if (!array_key_exists($opcode_int, $opcode_ints))
 die("Bad opcode in websocket frame: {$opcode_int}");
 $opcode = $opcode_ints[$opcode_int];
-$masked = (bool)($byte_2 & 0b10000000);
+$masked = (bool) ($byte_2 & 0b10000000);
 $payload = '';
 $payload_length = $byte_2 & 0b01111111;
 if ($payload_length > 125) {
@@ -165,7 +165,7 @@ $this->pushMessage('pong', $p, $m);
 return [$f, $p, $c, $m];
 case 'close':
 if (strlen($p) > 0)
-[$sb, $s] = [$p[0] . $p[1], current(unpack('n', $p)), $s];
+[$sb, $s] = [$p[0] . $p[1], current(unpack('n', $p))];
 if (strlen($p) >= 2)
 $p = substr($p, 2);
 if (!$this->close)
@@ -192,18 +192,20 @@ return ($this->stream ?? false) ? get_resource_type($this->stream) : null;
 }
 
 public function setTimeout($s, $m = 0){
+if (!$this->isConnected() and !$this->connect()) return false;
 $this->opt['timeout'] = $s;
-if (!$this->isConnected()) return;
 return stream_set_timeout($this->stream, $s, $m);
 }
 
 public function gets($l){
+if (!$this->isConnected() and !$this->connect()) return false;
 if (!($g = fgets($this->stream, $l)))
 die('Could not read from stream');
 return $g;
 }
 
 public function read($l){
+if (!$this->isConnected() and !$this->connect()) return false;
 $d = '';
 while (strlen($d) < $l)
 if (!empty(stream_get_meta_data($this->stream)['timed_out']))
@@ -217,6 +219,7 @@ return $d;
 }
 
 public function write($d){
+if (!$this->isConnected() and !$this->connect()) return false;
 if (!($w = fwrite($this->stream, $d))) die("Failed to write");
 if ($w < strlen($d)) die("Could only write {$w} out of ". strlen($d) ." bytes.");
 return $w;
